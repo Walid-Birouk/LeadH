@@ -22,6 +22,8 @@ def open_store(cfg: Config) -> Store:
 
 
 def cmd_run(cfg: Config, args: argparse.Namespace) -> None:
+    if args.limit is not None:
+        cfg.limits.candidates_per_run = args.limit
     store = open_store(cfg)
     http = Http(cfg.crawler)
     budget = Budget(cfg.limits.llm_tokens_per_run)
@@ -98,6 +100,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("run", help="move leads forward through every step")
     p.add_argument("--run-id")
     p.add_argument("--steps", nargs="+", choices=STEPS)
+    p.add_argument("--limit", type=int, help="new candidates this run (default: limits.candidates_per_run)")
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("report", help="print a run's daily report")
