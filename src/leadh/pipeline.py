@@ -44,6 +44,8 @@ class Pipeline:
         self.store.event(self.run_id, step, kind, lead.lead_id if lead else None, detail)
         if kind == "error":
             log.warning("%s %s %s", step, lead.lead_id if lead else "-", detail)
+        elif kind in ("out", "parked", "reason", "refetch", "shadow"):
+            log.info("%-10s %s %s %s", step, lead.lead_id if lead else "-", kind if kind != "out" else "->", detail)
 
     def _advance(self, lead: Lead, step: str, status: Status) -> None:
         lead.status = status

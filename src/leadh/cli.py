@@ -119,7 +119,7 @@ def cmd_purge(cfg: Config, args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="leadh", description=__doc__)
     parser.add_argument("--config", default="config/leadh.yaml")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-q", "--quiet", action="store_true", help="only the report and errors")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("run", help="move leads forward through every step")
@@ -156,7 +156,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("purge", help="apply the retention periods").set_defaults(fn=cmd_purge)
 
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s")
+    logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(asctime)s %(message)s",
+                        datefmt="%H:%M:%S")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     load_dotenv()
     args.fn(load_config(args.config), args)
 
