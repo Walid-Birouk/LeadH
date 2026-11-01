@@ -104,7 +104,7 @@ class Pipeline:
                 self._advance(lead, "match", Status.NO_SITE)
                 continue
             fetched_at = now()
-            lead.site = Site(url=m.site_url, siren_found_at=m.siren_found_at)
+            lead.site = Site(url=m.site_url, siren_found_at=m.siren_found_at, proof=m.proof)
             lead.pages = []
             for page in m.pages:
                 digest = sha256(page.html)

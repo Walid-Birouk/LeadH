@@ -56,6 +56,8 @@ def hard_failures(lead: Lead, store: Store, mx: MxCheck, skip_commercial_opposit
 
 def review_flags(lead: Lead, cfg: Config) -> list[str]:
     flags = []
+    if lead.site and lead.site.proof != "siren":
+        flags.append("site_unproven")
     if lead.contact and lead.contact.kind == "nominative":
         flags.append("nominative_address")
     if lead.contact and lead.contact.free_mail:

@@ -131,3 +131,20 @@ def test_directory_pages_never_prove_a_site(cfg: Config, store: Store) -> None:
                                            "https://fiches-societes.fr/societe/exemple-conseil-812345674/mentions-legales"]})
     lead = Lead(lead_id="L-1", siren=SIREN_OK, name="EXEMPLE CONSEIL")
     assert SiteMatcher(http, search, 4, 5).match(lead, Deadline(60)) is None
+
+
+def test_name_and_postcode_match_goes_to_review(cfg: Config, store: Store) -> None:
+    from leadh.http import Deadline
+    from leadh.models import Lead
+
+    page = ('<html lang="fr"><main><p>Petit Atelier, conseil aux entreprises.</p>'
+            '<p>12 rue des Arts, 75011 Paris. <a href="mailto:contact@petit-atelier.fr">contact@petit-atelier.fr</a>'
+            "</p></main></html>")
+    http = make_http(cfg, fake_web(extra={"https://petit-atelier.fr/": page}))
+    lead = Lead(lead_id="L-1", siren="899999999", name="PETIT ATELIER SAS", city="PARIS", postal_code="75011")
+    m = SiteMatcher(http, StaticSearch({'"PETIT ATELIER SAS" PARIS': ["https://petit-atelier.fr/"]}), 4, 5) \
+        .match(lead, Deadline(60))
+    assert m is not None and m.proof == "name_address"
+    other = lead.model_copy(update={"postal_code": "69001"})
+    assert SiteMatcher(http, StaticSearch({'"PETIT ATELIER SAS" PARIS': ["https://petit-atelier.fr/"]}), 4, 5) \
+        .match(other, Deadline(60)) is None

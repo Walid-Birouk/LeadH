@@ -29,6 +29,9 @@ def now() -> datetime:
 class Site(BaseModel):
     url: str
     siren_found_at: str
+    # "name_address" when the site shows no SIREN but its name and postal code match the registry: weaker, so the
+    # Validator sends it to review.
+    proof: Literal["siren", "name_address"] = "siren"
 
 
 class PageRef(BaseModel):

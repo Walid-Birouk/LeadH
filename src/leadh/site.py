@@ -2,14 +2,17 @@
 the later steps read. Fetches stay on the candidate's own domain."""
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from typing import Literal
 from urllib.parse import urlsplit
 
 from leadh.http import CircuitOpen, Deadline, FetchError, Http
 from leadh.models import Lead
 from leadh.pages import domain_of, full_text, links, same_site, siren_in
-from leadh.search import WebSearch, is_directory
+from leadh.search import LEGAL_FORMS, WebSearch, is_directory
 
+CONTACT = re.compile(r"contact|nous-trouver|coordonn|acces|where|find-us", re.I)
 LEGAL = re.compile(r"mentions|legal|l[ée]gales|imprint|impressum|cgv|cgu|conditions|cgs|privacy|confidentialit", re.I)
 # Pages worth reading after the match, best first.
 PRIORITY = [
@@ -46,11 +49,30 @@ def proves(page: Fetched, siren: str) -> bool:
     return siren_in(text, siren) and not looks_like_directory(text) and siren not in re.sub(r"\D", "", page.url)
 
 
+def compact(text: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]", "", ascii_text)
+
+
+def names_and_places(page: Fetched, lead: Lead) -> bool:
+    """The page names the company (legal or trade name) and gives its head-office postal code."""
+    if not lead.postal_code:
+        return False
+    text = full_text(page.html)
+    if looks_like_directory(text) or not re.search(rf"(?<!\d){lead.postal_code}(?!\d)", text):
+        return False
+    flat = compact(text)
+    names = [*re.findall(r"\(([^)]*)\)", lead.name), re.sub(r"\(.*?\)", " ", lead.name)]
+    keys = [compact(LEGAL_FORMS.sub(" ", n.lower())) for n in names]
+    return any(len(k) >= 4 and k in flat for k in keys)
+
+
 @dataclass
 class Match:
     site_url: str
     siren_found_at: str
     pages: list[Fetched] = field(default_factory=list)
+    proof: Literal["siren", "name_address"] = "siren"
 
 
 class SiteMatcher:
@@ -90,12 +112,15 @@ class SiteMatcher:
         return Fetched(str(resp.url), resp.text)
 
     def match(self, lead: Lead, deadline: Deadline) -> Match | None:
+        """The first candidate proven by SIREN; failing that, the first matching on name and postal code."""
+        fallback: Match | None = None
         for domain, hits in self.candidates(lead):
             deadline.check()
             m = self._try(lead, domain, hits, deadline)
-            if m:
+            if m and m.proof == "siren":
                 return m
-        return None
+            fallback = fallback or m
+        return fallback
 
     def _try(self, lead: Lead, domain: str, hits: list[str], deadline: Deadline) -> Match | None:
         fetched: list[Fetched] = []
@@ -112,11 +137,13 @@ class SiteMatcher:
         to_check = [u for u in hits if u.rstrip("/") != home.url.rstrip("/") and LEGAL.search(urlsplit(u).path)]
         to_check += [u for u, text in links(home.html, home.url) if same_site(u, domain)
                      and (LEGAL.search(urlsplit(u).path) or LEGAL.search(text))]
+        to_check += [u for u, text in links(home.html, home.url) if same_site(u, domain)
+                     and (CONTACT.search(urlsplit(u).path) or CONTACT.search(text))]
         to_check = [u for u in to_check if lead.siren not in re.sub(r"\D", "", u)]
         proof = home if proves(home, lead.siren) else None
         seen = {home.url}
         for url in to_check:
-            if proof or len(fetched) >= 3:
+            if proof or len(fetched) >= 4:
                 break
             if url in seen:
                 continue
@@ -128,9 +155,13 @@ class SiteMatcher:
             fetched.append(page)
             if proves(page, lead.siren):
                 proof = page
+        kind: Literal["siren", "name_address"] = "siren"
+        if proof is None:
+            proof = next((p for p in fetched if names_and_places(p, lead)), None)
+            kind = "name_address"
         if proof is None:
             return None
-        match = Match(site_url=home.url, siren_found_at=proof.url, pages=fetched)
+        match = Match(site_url=home.url, siren_found_at=proof.url, pages=fetched, proof=kind)
         self._fill(match, domain, deadline)
         return match
 

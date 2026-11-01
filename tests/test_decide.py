@@ -83,3 +83,8 @@ def test_review_flags_and_score_bands(cfg: Config, store: Store) -> None:
     assert validate(lead(scores=Scores(need=90, fit=50)), cfg, store, mx_ok).status == "CONDITIONAL"
     assert validate(lead(scores=Scores(need=30, fit=100)), cfg, store, mx_ok).reasons == ["low_score"]
     assert validate(lead(contact=nominative, scores=Scores(need=20, fit=20)), cfg, store, mx_ok).status == "REJECTED"
+
+
+def test_unproven_site_needs_review(cfg: Config, store: Store) -> None:
+    site = Site(url="https://a.fr/", siren_found_at="https://a.fr/contact", proof="name_address")
+    assert validate(lead(site=site, scores=Scores(need=90, fit=100)), cfg, store, mx_ok).reasons == ["site_unproven"]
