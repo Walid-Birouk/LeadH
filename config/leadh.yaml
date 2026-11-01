@@ -1,0 +1,83 @@
+# Starting values from the design. Recalibrate weights on the first 100 labelled leads; bump rules_version
+# whenever a rule or weight changes so the next run re-scores and re-validates.
+rules_version: v1
+data_dir: data
+shadow_mode: true   # verdicts are written but nothing is handed off until you switch this off
+
+registry:
+  base_url: https://recherche-entreprises.api.gouv.fr
+  # The API filters on exact NAF codes; these are the B2B families below spelled out.
+  naf_codes: ["62.01Z", "62.02A", "62.02B", "62.03Z", "62.09Z", "70.22Z", "73.11Z", "71.12B"]
+  regions: ["11"]
+  per_page: 25
+  request_interval_s: 0.2   # the API allows 7 requests a second
+  # Sirene/RNE flag for a GDPR art. 21 objection to reuse of the company's data for prospecting.
+  skip_commercial_opposition: true
+
+naf:
+  b2b_prefixes: ["62", "70.22Z", "73.11Z", "71.12B", "46", "43"]
+  # 69.20Z is accountants: partners, contacted by hand.
+  excluded_prefixes: ["47", "56", "69.20Z"]
+
+search:
+  # "brave" once its terms are checked for this use; "guess" tries name.fr / name.com; "none" matches nothing.
+  provider: guess
+  api_key_env: BRAVE_API_KEY
+  max_candidates: 4
+
+crawler:
+  user_agent: "LeadH/0.1 (+https://github.com/Walid-Birouk/LeadH)"
+  request_interval_s: 1.0
+  timeout_s: 15
+  max_tries: 5
+  breaker_threshold: 3
+  breaker_pause_s: 60
+
+# DeepSeek Flash with thinking off: extraction needs no reasoning trace, and thinking is the provider's default.
+# Data is processed in China; for real prospects consider an EU host (Mistral: https://api.mistral.ai/v1,
+# mistral-small-latest). LLM_BASE_URL=mock runs offline. Prices are the off-peak cache-miss rates, used only for the
+# report's cost line; peak hours (01-04 and 06-10 UTC on weekdays) cost double, so schedule the run outside them.
+llm:
+  base_url: https://api.deepseek.com
+  model: deepseek-flash
+  api_key_env: DEEPSEEK_API_KEY
+  json_mode: true
+  extra_body: {thinking: {type: disabled}}
+  timeout_s: 60
+  max_chars_per_page: 6000
+  usd_per_mtok_in: 0.15
+  usd_per_mtok_out: 0.60
+
+limits:
+  candidates_per_run: 300
+  pages_per_site: 5
+  seconds_per_lead: 60
+  llm_tokens_per_run: 400000
+  handoffs_per_day: 30
+  freshness_days: 30
+  quote_max_words: 25
+  recent_creation_months: 18
+
+scoring:
+  need:
+    sells_to_businesses: 25
+    manual_invoicing: 25
+    employees_1_to_49: 15
+    no_invoicing_tool: 15
+    created_recently: 10
+    admin_job_ad: 10
+    invoicing_tool_detected: -30
+  fit:
+    english_pages: 40
+    head_office_ile_de_france: 20
+    naf_b2b: 20
+    generic_contact: 20
+  thresholds:
+    approve_need: 50
+    approve_fit: 60
+    review_need: 35
+    review_fit: 40
+
+retention_days:
+  pages: 30
+  never_contacted: 182
