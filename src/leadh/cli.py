@@ -1,9 +1,11 @@
 """LeadH: finds French SMEs that must issue e-invoices from September 2027 and scores them as leads."""
 
 import argparse
+import csv
 import logging
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 from leadh.config import Config, load_config, load_dotenv
 from leadh.http import Http
@@ -68,6 +70,29 @@ def cmd_decide(cfg: Config, args: argparse.Namespace) -> None:
     print(f"{lead.lead_id}: {args.decision} ({args.reason})")
 
 
+def cmd_export(cfg: Config, args: argparse.Namespace) -> None:
+    """APPROVED and CONDITIONAL leads, best first, as a CSV you can open in a spreadsheet."""
+    store = open_store(cfg)
+    leads = [x for x in store.by_status(Status.VALIDATED) + store.by_status(Status.HANDED_OFF)
+             if x.verdict and x.verdict.status in ("APPROVED", "CONDITIONAL")]
+    leads.sort(key=lambda x: (x.verdict.status != "APPROVED" if x.verdict else True,
+                              -(x.scores.need * x.scores.fit if x.scores else 0)))
+    out = Path(args.out or cfg.data_dir / "leads.csv")
+    with out.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["lead_id", "verdict", "flags", "need", "fit", "siren", "name", "city", "naf", "site", "email",
+                    "email_source", "english", "tools", "signals"])
+        for x in leads:
+            assert x.verdict
+            w.writerow([x.lead_id, x.verdict.status, " ".join(x.verdict.reasons), x.scores.need if x.scores else "",
+                        x.scores.fit if x.scores else "", x.siren, x.name, x.city, x.naf,
+                        x.site.url if x.site else "", x.contact.email if x.contact else "",
+                        x.contact.source_url if x.contact else "", "yes" if x.english_at else "",
+                        ", ".join(t.name for t in x.tools),
+                        " | ".join(f'{s.type}: "{s.quote}"' for s in x.signals if s.checked)])
+    print(f"{len(leads)} leads written to {out}")
+
+
 def cmd_optout(cfg: Config, args: argparse.Namespace) -> None:
     open_store(cfg).add_optout(args.kind, args.value)
 
@@ -114,6 +139,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("decision", choices=["approve", "reject"])
     p.add_argument("reason", help="reason code, e.g. plateforme_fictive or role_mismatch")
     p.set_defaults(fn=cmd_decide)
+
+    p = sub.add_parser("export", help="APPROVED and CONDITIONAL leads as a CSV")
+    p.add_argument("--out", help="file to write (default: <data_dir>/leads.csv)")
+    p.set_defaults(fn=cmd_export)
 
     p = sub.add_parser("optout", help="add a SIREN or email domain to the opt-out list")
     p.add_argument("kind", choices=["siren", "domain"])
