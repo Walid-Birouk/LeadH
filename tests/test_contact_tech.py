@@ -49,3 +49,30 @@ def test_guessed_domains_from_name() -> None:
     assert g.search('"ALTRNATIV.COM" PARIS')[0] == "https://altrnativ.com/"
     assert g.search('"JEAN DUPONT (CLOUDBOOST)" PARIS')[:2] == ["https://cloudboost.fr/", "https://cloudboost.com/"]
     assert g.search('"812345674"') == []
+
+
+def test_brave_query_ranks_snippets_showing_the_siren_first() -> None:
+    import httpx
+
+    from leadh.config import load_config
+    from leadh.search import BraveSearch, ChainedSearch, StaticSearch
+
+    from .conftest import ROOT, make_http
+
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        return httpx.Response(200, json={"web": {"results": [
+            {"url": "https://blog.example.com/top-agences", "description": "Les meilleures agences"},
+            {"url": "https://a.fr/mentions-legales", "description": "RCS Paris 812 345 674"}]}})
+
+    cfg = load_config(ROOT / "config" / "leadh.yaml")
+    brave = BraveSearch(make_http(cfg, handler), "key")
+    assert brave.search('"812345674"') == ["https://a.fr/mentions-legales", "https://blog.example.com/top-agences"]
+    params = seen[0].params
+    assert "-site:societe.com" in params["q"] and params["country"] == "FR" and params["spellcheck"] == "false"
+    assert seen[0].host == "api.search.brave.com"
+
+    chained = ChainedSearch([brave, StaticSearch({'"812345674"': ["https://a.fr/mentions-legales", "https://b.fr/"]})])
+    assert chained.search('"812345674"')[-1] == "https://b.fr/"

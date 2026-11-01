@@ -20,9 +20,11 @@ naf:
   excluded_prefixes: ["47", "56", "69.20Z"]
 
 search:
-  # "brave" once its terms are checked for this use; "guess" tries name.fr / name.com; "none" matches nothing.
-  provider: guess
-  api_key_env: BRAVE_API_KEY
+  # One or several of brave, guess, none, joined by "+". brave is the Brave Search API; guess tries the company name
+  # as a .fr or .com domain. Only a page showing the SIREN makes a match, whatever found the candidate.
+  provider: brave+guess
+  api_key_env: BRAVE_SEARCH_API_KEY
+  interval_s: 1.0        # Brave's free plan allows one query a second
   max_candidates: 4
 
 crawler:

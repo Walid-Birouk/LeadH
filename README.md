@@ -37,12 +37,16 @@ appended to `data/handoff/<day>.jsonl`.
 
 ## Site matching
 
-`search.provider` picks how candidate sites are found:
+`search.provider` lists how candidate sites are found, tried in order:
 
-- `guess` (default) tries the company name as a `.fr` or `.com` domain. Free, and only a page showing the SIREN
-  counts as a match, but it misses sites whose domain differs from the legal name.
-- `brave` uses the Brave Search API (`BRAVE_API_KEY`). Check its terms allow this use first.
-- `none` matches nothing.
+- `brave`: the Brave Search API (`BRAVE_SEARCH_API_KEY`). It searches the SIREN first, with the big directories
+  excluded, and then the name and city. Results whose snippet already shows the SIREN are tried first.
+- `guess`: tries the trade name, or the legal name, as a `.fr` or `.com` domain. It's free and catches sites
+  the search misses.
+- `none`: finds nothing.
+
+The default is `brave+guess`. Whatever finds a candidate, it only counts as the company's site when one of its
+pages shows the SIREN.
 
 ## Rules the code enforces
 

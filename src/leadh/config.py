@@ -22,7 +22,8 @@ class NafConfig(BaseModel):
 
 class SearchConfig(BaseModel):
     provider: str = "none"
-    api_key_env: str = "BRAVE_API_KEY"
+    api_key_env: str = "BRAVE_SEARCH_API_KEY"
+    interval_s: float = 1.0
     max_candidates: int = 3
 
 
