@@ -68,6 +68,10 @@ class Registry:
                               "per_page": str(reg.per_page), "page": str(page)}
                     if region:
                         params["region"] = region
+                    if reg.employee_bands:
+                        params["tranche_effectif_salarie"] = ",".join(reg.employee_bands)
+                    if reg.exclude_sole_traders:
+                        params["est_entrepreneur_individuel"] = "false"
                     data = self._search(params)
                     for row in data.get("results", []):
                         if not self.processable(row):

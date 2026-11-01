@@ -13,6 +13,8 @@ class RegistryConfig(BaseModel):
     per_page: int = 25
     request_interval_s: float = 0.2
     skip_commercial_opposition: bool = True
+    employee_bands: list[str] = []
+    exclude_sole_traders: bool = False
 
 
 class NafConfig(BaseModel):

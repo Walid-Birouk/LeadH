@@ -13,6 +13,10 @@ registry:
   request_interval_s: 0.2   # the API allows 7 requests a second
   # Sirene/RNE flag for a GDPR art. 21 objection to reuse of the company's data for prospecting.
   skip_commercial_opposition: true
+  # Sirene bands 01 to 12 are 1 to 49 employees. Companies with staff far more often have a site that names them;
+  # empty the list to include 0 employees and unknown bands (most new companies).
+  employee_bands: ["01", "02", "03", "11", "12"]
+  exclude_sole_traders: true
 
 naf:
   b2b_prefixes: ["62", "70.22Z", "73.11Z", "71.12B", "46", "43"]

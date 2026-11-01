@@ -98,3 +98,16 @@ def test_dotenv_fills_only_unset_variables(tmp_path, monkeypatch) -> None:  # ty
 
     assert os.environ["LEADH_T1"] == "from file" and os.environ["LEADH_T2"] == "from env"
     monkeypatch.delenv("LEADH_T1")
+
+
+def test_scout_sends_band_and_sole_trader_filters(cfg: Config) -> None:
+    cfg.registry.naf_codes = ["70.22Z"]
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        return httpx.Response(200, json={"results": [], "total_pages": 1})
+
+    list(Registry(cfg, make_http(cfg, handler)).candidates())
+    assert seen[0].params["tranche_effectif_salarie"] == "01,02,03,11,12"
+    assert seen[0].params["est_entrepreneur_individuel"] == "false"
