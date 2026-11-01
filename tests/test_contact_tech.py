@@ -76,3 +76,10 @@ def test_brave_query_ranks_snippets_showing_the_siren_first() -> None:
 
     chained = ChainedSearch([brave, StaticSearch({'"812345674"': ["https://a.fr/mentions-legales", "https://b.fr/"]})])
     assert chained.search('"812345674"')[-1] == "https://b.fr/"
+
+
+def test_company_name_mailbox_is_generic() -> None:
+    from leadh.contact import is_generic
+
+    assert is_generic("ypok@ypok.com") and is_generic("short-edition@shortedition.com")
+    assert not is_generic("marie@ypok.com")

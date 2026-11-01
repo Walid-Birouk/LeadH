@@ -39,8 +39,12 @@ def emails_on(html: str) -> list[str]:
 
 
 def is_generic(email: str) -> bool:
-    local = email.split("@")[0].split("+")[0]
-    return local in GENERIC_LOCAL_PARTS or re.sub(r"[._-]", "", local) in GENERIC_LOCAL_PARTS
+    local, _, domain = email.partition("@")
+    local = local.split("+")[0]
+    flat = re.sub(r"[._-]", "", local)
+    # name@name.fr is the company's own name, not a person's.
+    company = re.sub(r"[._-]", "", domain.split(".")[0])
+    return local in GENERIC_LOCAL_PARTS or flat in GENERIC_LOCAL_PARTS or flat == company
 
 
 def best_contact(pages: list[tuple[str, str]], site_domain: str) -> Contact | None:
