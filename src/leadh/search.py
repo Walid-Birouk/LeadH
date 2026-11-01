@@ -12,7 +12,11 @@ NOT_OWN_SITE = frozenset({
     "entreprises.lefigaro.fr", "kompass.com", "pagesjaunes.fr", "linkedin.com", "facebook.com", "instagram.com",
     "x.com", "twitter.com", "youtube.com", "indeed.com", "welcometothejungle.com", "glassdoor.fr", "google.com",
     "wikipedia.org", "bodacc.fr", "inpi.fr", "sirene.fr", "dnb.com", "corporama.com", "lagazettefrance.fr",
-    "score3.fr", "infonet.fr", "societe.ninja", "entreprise.data.gouv.fr", "impots.gouv.fr",
+    "score3.fr", "infonet.fr", "societe.ninja", "entreprise.data.gouv.fr", "impots.gouv.fr", "rubypayeur.com",
+    "dataprospects.fr", "annuairefrancais.fr", "eterritoire.fr", "apify.com", "northdata.fr", "northdata.com",
+    "lefigaro.fr", "pappers.com", "firmania.fr", "118000.fr", "annuaire-mairie.fr",
+    "b-reputation.com", "doctrine.fr", "ellisphere.com", "creditsafe.com", "data.gouv.fr",
+    "opencorporates.com", "bilansgratuits.fr", "societeinfo.com", "lagazettedescommunes.com",
 })
 
 

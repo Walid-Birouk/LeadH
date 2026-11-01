@@ -115,3 +115,19 @@ def test_review_list_shows_quotes_and_links(cfg: Config, store: Store) -> None:
     pipeline(cfg, store).run()
     text = review_list(store)
     assert "score_band" in text and "https://exemple-conseil.fr/faq" in text and '"' in text
+
+
+def test_directory_pages_never_prove_a_site(cfg: Config, store: Store) -> None:
+    from leadh.http import Deadline
+    from leadh.models import Lead
+
+    listing = "<p>" + " ".join(f"SIREN 81234{i:04d}" for i in range(6)) + " SIREN 812345674</p>"
+    per_company = "<h1>EXEMPLE CONSEIL</h1><p>SIREN : 812 345 674</p>"
+    extra = {"https://annuaire-pro.fr/": listing,
+             "https://fiches-societes.fr/": "<p>Toutes les fiches</p>",
+             "https://fiches-societes.fr/societe/exemple-conseil-812345674/mentions-legales": per_company}
+    http = make_http(cfg, fake_web(extra=extra))
+    search = StaticSearch({'"812345674"': ["https://annuaire-pro.fr/",
+                                           "https://fiches-societes.fr/societe/exemple-conseil-812345674/mentions-legales"]})
+    lead = Lead(lead_id="L-1", siren=SIREN_OK, name="EXEMPLE CONSEIL")
+    assert SiteMatcher(http, search, 4, 5).match(lead, Deadline(60)) is None

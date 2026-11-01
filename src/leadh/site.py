@@ -3,6 +3,7 @@ the later steps read. Fetches stay on the candidate's own domain."""
 
 import re
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from leadh.http import CircuitOpen, Deadline, FetchError, Http
 from leadh.models import Lead
@@ -25,10 +26,24 @@ PRIORITY = [
 ]
 
 
+# A SIREN, SIRET or RCS number written next to its label. A page listing several is a directory, not a company.
+REGISTRATION = re.compile(r"(?:siren|siret|rcs|r\.c\.s\.?)\D{0,25}(\d{3}[\s.\u00a0]?\d{3}[\s.\u00a0]?\d{3})", re.I)
+MAX_OWN_NUMBERS = 3
+
+
+def looks_like_directory(text: str) -> bool:
+    return len({re.sub(r"\D", "", n) for n in REGISTRATION.findall(text)}) > MAX_OWN_NUMBERS
+
+
 @dataclass
 class Fetched:
     url: str
     html: str
+
+
+def proves(page: Fetched, siren: str) -> bool:
+    text = full_text(page.html)
+    return siren_in(text, siren) and not looks_like_directory(text) and siren not in re.sub(r"\D", "", page.url)
 
 
 @dataclass
@@ -90,11 +105,15 @@ class SiteMatcher:
             return None
         domain = domain_of(home.url)
         fetched.append(home)
-        # Search hits on this domain first (the SIREN query often lands on the legal notice), then legal links.
-        to_check = [u for u in hits if u.rstrip("/") != home.url.rstrip("/")]
+        if looks_like_directory(full_text(home.html)):
+            return None
+        # Only the home page or a legal notice can prove ownership: a directory's per-company page (one URL per
+        # SIREN) shows the number too. Search hits first, since the SIREN query often lands on the legal notice.
+        to_check = [u for u in hits if u.rstrip("/") != home.url.rstrip("/") and LEGAL.search(urlsplit(u).path)]
         to_check += [u for u, text in links(home.html, home.url) if same_site(u, domain)
-                     and (LEGAL.search(u) or LEGAL.search(text))]
-        proof = home if siren_in(full_text(home.html), lead.siren) else None
+                     and (LEGAL.search(urlsplit(u).path) or LEGAL.search(text))]
+        to_check = [u for u in to_check if lead.siren not in re.sub(r"\D", "", u)]
+        proof = home if proves(home, lead.siren) else None
         seen = {home.url}
         for url in to_check:
             if proof or len(fetched) >= 3:
@@ -107,7 +126,7 @@ class SiteMatcher:
             if page is None:
                 continue
             fetched.append(page)
-            if siren_in(full_text(page.html), lead.siren):
+            if proves(page, lead.siren):
                 proof = page
         if proof is None:
             return None
