@@ -92,6 +92,8 @@ class Draft(BaseModel):
     # "needs_edit" when a slot had neither a supported value nor a fallback; the body marks it [[slot]].
     status: Literal["ready", "needs_edit"] = "ready"
     drafted_at: datetime = Field(default_factory=now)
+    # Set once the draft is saved to your mailbox's Drafts folder, so it is never saved twice.
+    in_mailbox_at: datetime | None = None
 
 
 class Lead(BaseModel):

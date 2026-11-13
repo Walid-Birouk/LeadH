@@ -79,6 +79,31 @@ always gets the same variant, in any run order, and roughly half go each way. `l
 best-ranked leads first. Recording `sent` also adds the SIREN to the contacted ledger (`data/ledger.db`, shared by every
 campaign along with the opt-out list), so no campaign drafts that company again.
 
+## Drafts in your mailbox
+
+`uv run leadh --campaign <file> to-mailbox` saves every ready draft into your mailbox's Drafts folder over IMAP,
+best leads first, each once. LeadH has no sending code: you open each draft in your mail app, read it, edit it and
+send it yourself, then record it with `outcome <lead> sent`. Drafts marked `needs_edit`, and companies already
+contacted or opted out, are left out. Each draft carries an `X-LeadH-Lead` header with its lead, campaign and
+variant.
+
+Set `LEADH_MAIL_USER` and `LEADH_MAIL_IMAP_HOST` in `.env` (`outlook`, `gmail`, `ovh`, `icloud`, `yahoo`, or a
+host name). Gmail, OVH, iCloud and Yahoo take an app password in `LEADH_MAIL_APP_PASSWORD`.
+
+Outlook.com and Microsoft 365 no longer accept any password over IMAP (since September 2024); they need an OAuth
+sign-in, which needs an app ID of your own, once:
+
+1. Sign in at [portal.azure.com](https://portal.azure.com) (a free Azure account is enough) and open
+   Microsoft Entra ID, then App registrations, then New registration.
+2. Name it LeadH. Supported account types: "Personal Microsoft accounts only" for an @outlook / @hotmail
+   address, or "Accounts in any organizational directory and personal Microsoft accounts" for a work address.
+   No redirect URI.
+3. In Authentication, set "Allow public client flows" to Yes and save.
+4. Copy the Application (client) ID into `LEADH_MAIL_MS_CLIENT_ID`.
+
+The first `to-mailbox` prints a code to enter at microsoft.com/devicelogin and asks you to allow IMAP access.
+The sign-in is then cached in `data/ms_token_cache.json` (never committed) and renewed silently.
+
 ## Rules the code enforces
 
 - Companies with Sirene diffusion status P, or flagged as opposed to reuse of their data for prospecting

@@ -10,6 +10,7 @@ from pathlib import Path
 from leadh.campaign import Campaign, compare, compare_table, draft_messages, load_campaign
 from leadh.config import Config, load_config, load_dotenv
 from leadh.http import Http
+from leadh.mailbox import MailboxError, MailboxSettings, microsoft_token, save_drafts
 from leadh.models import Lead, Status, Verdict, now
 from leadh.outreach import MODEL_SLOTS, mock_slots
 from leadh.pipeline import STEPS, Pipeline
@@ -129,6 +130,19 @@ def cmd_outcome(cfg: Config, args: argparse.Namespace) -> None:
         store.add_contacted(lead.siren)
 
 
+def cmd_to_mailbox(cfg: Config, args: argparse.Namespace) -> None:
+    """Ready drafts into your Drafts folder. Nothing is sent: you read, edit and send each one yourself."""
+    try:
+        settings = MailboxSettings.from_env()
+        # The sign-in cache sits next to the shared ledger, so one sign-in serves every campaign.
+        cache = (cfg.ledger or cfg.data_dir / "ledger.db").parent / "ms_token_cache.json"
+        r = save_drafts(open_store(cfg), settings, lambda: microsoft_token(settings, cache), limit=args.limit)
+    except MailboxError as e:
+        sys.exit(str(e))
+    print(f"{r.saved} drafts saved to {r.folder or 'your Drafts folder'}; {r.already} already there, "
+          f"{r.needs_edit} need your edit first, {r.no_contact} skipped (contacted, opted out or no address)")
+
+
 def cmd_compare(cfg: Config, args: argparse.Namespace) -> None:
     print(compare_table(compare([load_campaign(p) for p in args.campaigns])))
 
@@ -199,6 +213,10 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("draft", help="fill the campaign's templates for APPROVED leads (needs --campaign)") \
         .set_defaults(fn=cmd_draft)
+
+    p = sub.add_parser("to-mailbox", help="save ready drafts into your mailbox's Drafts folder (never sends)")
+    p.add_argument("--limit", type=int, help="at most this many drafts")
+    p.set_defaults(fn=cmd_to_mailbox)
 
     p = sub.add_parser("outcome", help="record what happened to a drafted message")
     p.add_argument("lead_id")
