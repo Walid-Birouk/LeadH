@@ -32,6 +32,7 @@ class Pipeline:
     matcher: SiteMatcher
     reader: SignalReader
     run_id: str
+    campaign: str = ""
     mx: MxCheck = has_mx
     today: Callable[[], date] = date.today
 
@@ -80,6 +81,7 @@ class Pipeline:
                 if self.store.has(row["siren"]):
                     continue
                 lead = to_lead(row, self.store.next_lead_id(), self.run_id)
+                lead.campaign = self.campaign
                 self._event("scout", "in", lead)
                 self._advance(lead, "scout", Status.FOUND)
                 added += 1

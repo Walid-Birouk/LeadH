@@ -48,6 +48,37 @@ appended to `data/handoff/<day>.jsonl`.
 The default is `brave+guess`. Whatever finds a candidate, it only counts as the company's site when one of its
 pages shows the SIREN.
 
+## Campaigns, templates and A/B tests
+
+A campaign file in `campaigns/` bundles one customer profile (a config file: NAF families, scoring, rules), one
+lead source (overrides of its `registry` section), one or two templates, and a lead count. Each campaign keeps its
+own data under `data/campaigns/<name>/`, so campaigns can run side by side and be compared.
+
+```
+uv run leadh --campaign campaigns/einvoicing-it-idf.yaml run --limit 50
+uv run leadh --campaign campaigns/einvoicing-it-idf.yaml draft     # fill the templates for APPROVED leads
+uv run leadh --campaign campaigns/einvoicing-it-idf.yaml export    # leads.csv with variant, subject, body
+uv run leadh --campaign campaigns/einvoicing-it-idf.yaml outcome L-000014 sent    # then replied, meeting, bounced
+uv run leadh compare campaigns/*.yaml                              # drafts, sends, replies per variant
+```
+
+A template (`templates/*.txt`) is a `subject:` line in lowercase, a `---` line, then the body. You write the
+words; the model only fills these slots, from the lead's own pages:
+
+- `{second_decision_maker}`: someone in management named on the site, as "Name, role".
+- `{peer_company}`: a customer the site names.
+- `{specific_fact}`: one concrete fact the site states about the company.
+
+Each fill must come with a sentence quoted from a page the lead's site served, checked like a signal; a name must
+appear in its own quote. LinkedIn and other networks are never read. `{company}`, `{city}`, `{site}` and
+`{email_source}` come from the lead record. `{slot|fallback}` gives the words to use when nothing on the site
+supports the slot; without a fallback the draft is marked `needs_edit` and shows `[[slot]]` for you to finish.
+
+With two templates, each lead gets variant A or B from a hash of the campaign name and its SIREN: the same lead
+always gets the same variant, in any run order, and roughly half go each way. `lead_count` caps the drafts,
+best-ranked leads first. Recording `sent` also adds the SIREN to the contacted ledger (`data/ledger.db`, shared by every
+campaign along with the opt-out list), so no campaign drafts that company again.
+
 ## Rules the code enforces
 
 - Companies with Sirene diffusion status P, or flagged as opposed to reuse of their data for prospecting

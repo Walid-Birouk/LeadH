@@ -1,0 +1,12 @@
+# One customer profile, one lead source, two templates to compare, a lead count.
+# Run it with: uv run leadh --campaign campaigns/einvoicing-it-idf.yaml run, then draft, then export.
+name: einvoicing-it-idf
+profile: config/leadh.yaml          # who the customer is: NAF families, scoring, rules, model
+source:                             # which companies are scouted (overrides the profile's registry section)
+  naf_codes: ["62.01Z", "62.02A", "62.03Z", "62.09Z"]
+  regions: ["11"]
+  employee_bands: ["01", "02", "03", "11", "12"]
+templates:                          # one template = no test; two = an A/B split, fixed per company
+  A: templates/einvoicing-short.txt
+  B: templates/einvoicing-peer.txt
+lead_count: 60                      # messages drafted in total, best leads first
