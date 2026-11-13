@@ -1,0 +1,10 @@
+name: einvoicing-consulting-idf
+profile: config/leadh.yaml
+source:
+  naf_codes: ["70.22Z", "73.11Z", "71.12B"]
+  regions: ["11"]
+  employee_bands: ["01", "02", "03", "11", "12"]
+templates:
+  A: templates/einvoicing-short.txt
+  B: templates/einvoicing-peer.txt
+lead_count: 60

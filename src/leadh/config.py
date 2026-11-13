@@ -82,6 +82,8 @@ class Retention(BaseModel):
 class Config(BaseModel):
     rules_version: str
     data_dir: Path = Path("data")
+    # Opt-out list and contacted ledger, shared by all campaigns; defaults to <data_dir>/ledger.db.
+    ledger: Path | None = None
     shadow_mode: bool = True
     registry: RegistryConfig
     naf: NafConfig
@@ -113,4 +115,5 @@ def load_config(path: Path | str = "config/leadh.yaml") -> Config:
     cfg.search.provider = os.environ.get("LEADH_SEARCH", cfg.search.provider)
     if "LEADH_DATA" in os.environ:
         cfg.data_dir = Path(os.environ["LEADH_DATA"])
+    cfg.ledger = cfg.ledger or cfg.data_dir / "ledger.db"
     return cfg

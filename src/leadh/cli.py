@@ -1,4 +1,4 @@
-"""LeadH: finds French SMEs that must issue e-invoices from September 2027 and scores them as leads."""
+"""LeadH: finds companies that fit a customer profile, scores them as leads and drafts outreach to test."""
 
 import argparse
 import csv
@@ -7,9 +7,11 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+from leadh.campaign import Campaign, compare, compare_table, draft_messages, load_campaign
 from leadh.config import Config, load_config, load_dotenv
 from leadh.http import Http
-from leadh.models import Status, Verdict, now
+from leadh.models import Lead, Status, Verdict, now
+from leadh.outreach import MODEL_SLOTS, mock_slots
 from leadh.pipeline import STEPS, Pipeline
 from leadh.registry import Registry
 from leadh.report import daily_report, review_list, rule_candidates
@@ -20,7 +22,7 @@ from leadh.store import Store
 
 
 def open_store(cfg: Config) -> Store:
-    return Store(cfg.data_dir / "leadh.db")
+    return Store(cfg.data_dir / "leadh.db", cfg.ledger)
 
 
 def cmd_run(cfg: Config, args: argparse.Namespace) -> None:
@@ -33,7 +35,7 @@ def cmd_run(cfg: Config, args: argparse.Namespace) -> None:
         cfg=cfg, store=store, registry=Registry(cfg, http),
         matcher=SiteMatcher(http, make_search(cfg.search, http), cfg.search.max_candidates, cfg.limits.pages_per_site),
         reader=SignalReader(make_complete(cfg.llm), budget, cfg.llm.max_chars_per_page),
-        run_id=args.run_id or date.today().isoformat())
+        run_id=args.run_id or date.today().isoformat(), campaign=args.campaign.name if args.campaign else "")
     pipeline.run(args.steps)
     report = daily_report(store, cfg, pipeline.run_id, budget.used_in, budget.used_out)
     out = cfg.data_dir / "reports" / f"{pipeline.run_id}.txt"
@@ -81,7 +83,8 @@ def cmd_export(cfg: Config, args: argparse.Namespace) -> None:
     with out.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["lead_id", "verdict", "flags", "need", "fit", "siren", "name", "city", "naf", "site", "email",
-                    "email_source", "english", "tools", "signals"])
+                    "email_source", "english", "tools", "signals", "campaign", "variant", "template", "draft_status",
+                    "subject", "body", *(f"{s}_quote" for s in MODEL_SLOTS)])
         for x in leads:
             assert x.verdict
             w.writerow([x.lead_id, x.verdict.status, " ".join(x.verdict.reasons), x.scores.need if x.scores else "",
@@ -89,8 +92,45 @@ def cmd_export(cfg: Config, args: argparse.Namespace) -> None:
                         x.site.url if x.site else "", x.contact.email if x.contact else "",
                         x.contact.source_url if x.contact else "", "yes" if x.english_at else "",
                         ", ".join(t.name for t in x.tools),
-                        " | ".join(f'{s.type}: "{s.quote}"' for s in x.signals if s.checked)])
+                        " | ".join(f'{s.type}: "{s.quote}"' for s in x.signals if s.checked), *draft_cells(x)])
     print(f"{len(leads)} leads written to {out}")
+
+
+def draft_cells(lead: Lead) -> list[str]:
+    d = lead.draft
+    if d is None:
+        return [lead.campaign, "", "", "", "", "", *("" for _ in MODEL_SLOTS)]
+    quotes = [f'"{d.slots[s].quote}" {d.slots[s].url}' if s in d.slots else "" for s in MODEL_SLOTS]
+    return [lead.campaign, d.variant, d.template, d.status, d.subject, d.body, *quotes]
+
+
+def need_campaign(args: argparse.Namespace) -> Campaign:
+    if not args.campaign:
+        sys.exit("this command needs --campaign campaigns/<name>.yaml")
+    campaign: Campaign = args.campaign
+    return campaign
+
+
+def cmd_draft(cfg: Config, args: argparse.Namespace) -> None:
+    campaign = need_campaign(args)
+    budget = Budget(cfg.limits.llm_tokens_per_run)
+    result = draft_messages(campaign, open_store(cfg), make_complete(cfg.llm, mock=mock_slots), budget)
+    print(f"{campaign.name}: {result.drafted} drafted ({result.needs_edit} need your edit), {result.skipped} "
+          f"skipped; LLM {budget.used} tokens")
+
+
+def cmd_outcome(cfg: Config, args: argparse.Namespace) -> None:
+    store = open_store(cfg)
+    lead = store.get(args.lead_id)
+    if lead is None or lead.draft is None:
+        sys.exit(f"{args.lead_id} has no draft")
+    store.add_outcome(lead.lead_id, args.event)
+    if args.event == "sent":
+        store.add_contacted(lead.siren)
+
+
+def cmd_compare(cfg: Config, args: argparse.Namespace) -> None:
+    print(compare_table(compare([load_campaign(p) for p in args.campaigns])))
 
 
 def cmd_optout(cfg: Config, args: argparse.Namespace) -> None:
@@ -119,6 +159,8 @@ def cmd_purge(cfg: Config, args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="leadh", description=__doc__)
     parser.add_argument("--config", default="config/leadh.yaml")
+    parser.add_argument("--campaign", type=load_campaign,
+                        help="campaign file; replaces --config and keeps its own data")
     parser.add_argument("-q", "--quiet", action="store_true", help="only the report and errors")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -155,12 +197,24 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("purge", help="apply the retention periods").set_defaults(fn=cmd_purge)
 
+    sub.add_parser("draft", help="fill the campaign's templates for APPROVED leads (needs --campaign)") \
+        .set_defaults(fn=cmd_draft)
+
+    p = sub.add_parser("outcome", help="record what happened to a drafted message")
+    p.add_argument("lead_id")
+    p.add_argument("event", choices=["sent", "replied", "meeting", "bounced"])
+    p.set_defaults(fn=cmd_outcome)
+
+    p = sub.add_parser("compare", help="drafts, sends and replies per campaign and variant")
+    p.add_argument("campaigns", nargs="+", help="campaign files")
+    p.set_defaults(fn=cmd_compare)
+
+    load_dotenv()  # before parsing: --campaign loads its config, which reads the environment
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING if args.quiet else logging.INFO, format="%(asctime)s %(message)s",
                         datefmt="%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    load_dotenv()
-    args.fn(load_config(args.config), args)
+    args.fn(args.campaign.cfg if args.campaign else load_config(args.config), args)
 
 
 if __name__ == "__main__":

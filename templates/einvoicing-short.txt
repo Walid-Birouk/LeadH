@@ -1,0 +1,14 @@
+subject: facture électronique chez {company}
+---
+Bonjour,
+
+J'ai vu que {specific_fact|vous travaillez surtout avec des entreprises}. À partir de septembre 2027, {company} devra émettre ses factures au format électronique, via une plateforme agréée.
+
+J'installe ça pour les PME en prix fixe : choix de la plateforme, nettoyage des fiches clients, branchement de votre outil de facturation, tests.
+
+Un appel de 20 minutes la semaine prochaine pour voir où vous en êtes ?
+
+Walid
+esPAce · https://espa-studio.fr
+
+J'ai trouvé votre adresse sur {email_source}. Si ce n'est pas le bon interlocuteur ou si vous ne souhaitez plus être contacté, répondez simplement « stop ».

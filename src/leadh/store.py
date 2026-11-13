@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS decisions (
     reason_code TEXT NOT NULL,
     decided_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS outcomes (
+    lead_id TEXT NOT NULL,
+    event TEXT NOT NULL CHECK (event IN ('sent', 'replied', 'meeting', 'bounced')),
+    at TEXT NOT NULL,
+    PRIMARY KEY (lead_id, event)
+);
 CREATE TABLE IF NOT EXISTS events (
     run_id TEXT NOT NULL,
     step TEXT NOT NULL,
@@ -57,14 +63,39 @@ CREATE TABLE IF NOT EXISTS events (
 );
 """
 
+LEDGER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS ledger.optout (
+    kind TEXT NOT NULL CHECK (kind IN ('siren', 'domain')),
+    value TEXT NOT NULL,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (kind, value)
+);
+CREATE TABLE IF NOT EXISTS ledger.contacted (
+    siren TEXT PRIMARY KEY,
+    contacted_at TEXT NOT NULL
+);
+"""
+
 
 class Store:
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path | str, ledger: Path | str | None = None) -> None:
+        """`ledger`: a database holding the opt-out list and the contacted ledger, shared by every campaign so a
+        company is never contacted twice or after objecting, whichever campaign found it."""
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(str(path))
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        self.ledger = "main"
+        if ledger is not None and Path(ledger).resolve() != Path(path).resolve():
+            Path(ledger).parent.mkdir(parents=True, exist_ok=True)
+            self.db.execute("ATTACH DATABASE ? AS ledger", (str(ledger),))
+            self.db.executescript(LEDGER_SCHEMA)
+            # Entries made before the shared ledger existed move into it.
+            self.db.execute("INSERT OR IGNORE INTO ledger.optout SELECT * FROM main.optout")
+            self.db.execute("INSERT OR IGNORE INTO ledger.contacted SELECT * FROM main.contacted")
+            self.db.commit()
+            self.ledger = "ledger"
 
     def close(self) -> None:
         self.db.close()
@@ -145,21 +176,25 @@ class Store:
     # Opt-out list and contacted ledger: read here, written only by the Reply handler, the Sender and you.
 
     def add_optout(self, kind: str, value: str) -> None:
-        self.db.execute("INSERT OR IGNORE INTO optout VALUES (?, ?, ?)", (kind, value.lower(), now().isoformat()))
+        self.db.execute(f"INSERT OR IGNORE INTO {self.ledger}.optout VALUES (?, ?, ?)",
+                        (kind, value.lower(), now().isoformat()))
         self.db.commit()
 
     def opted_out(self, siren: str, domain: str | None) -> bool:
         row = self.db.execute(
-            "SELECT 1 FROM optout WHERE (kind = 'siren' AND value = ?) OR (kind = 'domain' AND value = ?)",
+            f"SELECT 1 FROM {self.ledger}.optout "
+            "WHERE (kind = 'siren' AND value = ?) OR (kind = 'domain' AND value = ?)",
             (siren, (domain or "").lower())).fetchone()
         return row is not None
 
     def add_contacted(self, siren: str, at: datetime | None = None) -> None:
-        self.db.execute("INSERT OR IGNORE INTO contacted VALUES (?, ?)", (siren, (at or now()).isoformat()))
+        self.db.execute(f"INSERT OR IGNORE INTO {self.ledger}.contacted VALUES (?, ?)",
+                        (siren, (at or now()).isoformat()))
         self.db.commit()
 
     def contacted(self, siren: str) -> bool:
-        return self.db.execute("SELECT 1 FROM contacted WHERE siren = ?", (siren,)).fetchone() is not None
+        return self.db.execute(f"SELECT 1 FROM {self.ledger}.contacted WHERE siren = ?",
+                               (siren,)).fetchone() is not None
 
     # Human decisions on CONDITIONAL leads
 
@@ -170,6 +205,18 @@ class Store:
 
     def decisions(self) -> list[sqlite3.Row]:
         return list(self.db.execute("SELECT * FROM decisions ORDER BY decided_at, rowid"))
+
+    # Outreach outcomes, recorded by hand or by the Sender, feed the campaign comparison.
+
+    def add_outcome(self, lead_id: str, event: str) -> None:
+        self.db.execute("INSERT OR IGNORE INTO outcomes VALUES (?, ?, ?)", (lead_id, event, now().isoformat()))
+        self.db.commit()
+
+    def outcomes(self) -> dict[str, set[str]]:
+        out: dict[str, set[str]] = {}
+        for r in self.db.execute("SELECT lead_id, event FROM outcomes"):
+            out.setdefault(r["lead_id"], set()).add(r["event"])
+        return out
 
     # Run events feed the daily report. Never names or addresses: lead IDs and reason codes only.
 
