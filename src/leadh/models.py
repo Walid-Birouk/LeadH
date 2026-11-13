@@ -76,6 +76,24 @@ class Verdict(BaseModel):
     decided_by: Literal["rules", "human"] = "rules"
 
 
+class SlotFill(BaseModel):
+    value: str
+    quote: str
+    url: str
+
+
+class Draft(BaseModel):
+    """One outreach message: the template's words, its slots filled from the lead's own pages."""
+    variant: str
+    template: str
+    subject: str
+    body: str
+    slots: dict[str, SlotFill] = {}
+    # "needs_edit" when a slot had neither a supported value nor a fallback; the body marks it [[slot]].
+    status: Literal["ready", "needs_edit"] = "ready"
+    drafted_at: datetime = Field(default_factory=now)
+
+
 class Lead(BaseModel):
     lead_id: str
     siren: str
@@ -102,5 +120,7 @@ class Lead(BaseModel):
     scores: Scores | None = None
     verdict: Verdict | None = None
     validated_at: datetime | None = None
+    campaign: str = ""
+    draft: Draft | None = None
     run_id: str = ""
     updated_at: datetime = Field(default_factory=now)

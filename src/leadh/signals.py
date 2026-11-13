@@ -176,5 +176,5 @@ def mock_complete(messages: list[dict[str, str]]) -> tuple[str, int, int]:
     return json.dumps({"signals": signals}), len(body) // 4, 50 * len(signals)
 
 
-def make_complete(cfg: LlmConfig) -> Complete:
-    return mock_complete if cfg.base_url == "mock" else openai_complete(cfg)
+def make_complete(cfg: LlmConfig, mock: Complete = mock_complete) -> Complete:
+    return mock if cfg.base_url == "mock" else openai_complete(cfg)

@@ -1,0 +1,14 @@
+subject: {company} et la facturation 2027
+---
+Bonjour,
+
+En lisant votre site, j'ai vu que vous travaillez avec {peer_company|des entreprises de votre secteur}. Elles vont toutes vous demander des factures électroniques à partir de septembre 2027, et vous devrez les émettre via une plateforme agréée.
+
+Je m'occupe de cette mise en place pour les PME, en prix fixe. Si c'est plutôt {second_decision_maker|la personne qui gère la facturation} qui suit ce sujet, je peux lui écrire directement.
+
+Vous avez 20 minutes cette semaine ?
+
+Walid
+esPAce · https://espa-studio.fr
+
+J'ai trouvé votre adresse sur {email_source}. Pour ne plus être contacté, répondez « stop ».
