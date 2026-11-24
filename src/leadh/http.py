@@ -13,7 +13,9 @@ from leadh.config import CrawlerConfig
 
 
 class FetchError(Exception):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class CircuitOpen(FetchError):
@@ -81,11 +83,11 @@ class Http:
             self.consecutive_429 = 0
             if resp.status_code >= 500:
                 if attempt == tries - 1:
-                    raise FetchError(f"HTTP {resp.status_code} on {host}")
+                    raise FetchError(f"HTTP {resp.status_code} on {host}", resp.status_code)
                 self._backoff(attempt)
                 continue
             if resp.status_code >= 400:
-                raise FetchError(f"HTTP {resp.status_code} on {host}")
+                raise FetchError(f"HTTP {resp.status_code} on {host}", resp.status_code)
             return resp
         raise FetchError(f"gave up on {host}")
 

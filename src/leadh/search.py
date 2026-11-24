@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from leadh.config import SearchConfig
 from leadh.http import Http
+from leadh.reach import AgentReach, ReachSearch
 
 # Directories, registries and social networks list the company but are not its own site.
 NOT_OWN_SITE = frozenset({
@@ -107,8 +108,8 @@ class ChainedSearch:
         return list(dict.fromkeys(url for s in self.searches for url in s.search(query)))
 
 
-def make_search(cfg: SearchConfig, http: Http) -> WebSearch:
-    """`provider` names one search or several joined by "+", e.g. "brave+guess"."""
+def make_search(cfg: SearchConfig, http: Http, reach: "AgentReach | None" = None) -> WebSearch:
+    """`provider` names one search or several joined by "+", e.g. "brave+agentreach+guess"."""
     searches: list[WebSearch] = []
     for name in cfg.provider.split("+"):
         if name == "brave":
@@ -116,6 +117,10 @@ def make_search(cfg: SearchConfig, http: Http) -> WebSearch:
             if not key:
                 raise SystemExit(f"search provider brave needs {cfg.api_key_env}")
             searches.append(BraveSearch(http, key, cfg.interval_s))
+        elif name == "agentreach":
+            if reach is None:
+                raise SystemExit("search provider agentreach needs the reach section enabled")
+            searches.append(ReachSearch(reach))
         elif name == "guess":
             searches.append(GuessDomains())
         elif name == "none":

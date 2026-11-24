@@ -90,6 +90,8 @@ def draft_messages(campaign: Campaign, store: Store, complete: Complete, budget:
         template = campaign.templates[variant]
         texts = {}
         for ref in lead.pages:
+            if ref.via == "job_ad":
+                continue  # slots come from the company's own pages only
             stored = store.page(ref.sha256)
             if stored:
                 texts[ref.url] = stored[1]

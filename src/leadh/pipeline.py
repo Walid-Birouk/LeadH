@@ -5,7 +5,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from leadh import evidence, scorer, tech
 from leadh.config import Config
@@ -13,9 +13,10 @@ from leadh.contact import best_contact
 from leadh.http import CircuitOpen, Deadline, FetchError
 from leadh.models import NEED_SIGNALS, Lead, PageRef, Site, Status, now
 from leadh.pages import clean_text, domain_of, is_english, sha256
+from leadh.reach import job_ads, job_page_html
 from leadh.registry import Registry, to_lead
 from leadh.signals import BadOutput, BudgetExhausted, SignalReader
-from leadh.site import SiteMatcher
+from leadh.site import Fetched, SiteMatcher
 from leadh.store import Store, expired
 from leadh.validator import MxCheck, has_mx, validate
 
@@ -109,14 +110,31 @@ class Pipeline:
             lead.site = Site(url=m.site_url, siren_found_at=m.siren_found_at, proof=m.proof)
             lead.pages = []
             for page in m.pages:
-                digest = sha256(page.html)
-                self.store.put_page(digest, page.url, page.html, clean_text(page.html), fetched_at)
-                lead.pages.append(PageRef(url=page.url, sha256=digest, fetched_at=fetched_at))
+                self._keep_page(lead, page, fetched_at)
             html_pages = [(p.url, p.html) for p in m.pages]
             lead.tools = tech.detect(html_pages)
             lead.contact = best_contact(html_pages, domain_of(m.site_url))
             lead.english_at = next((u for u, h in html_pages if is_english(h, u)), None)
+            # Job ads come last and only feed the Signal reader: no contact, tool or language is taken from them.
+            for ad in self._job_ads(lead):
+                self._keep_page(lead, ad, fetched_at)
+                self._event("match", "job_ad", lead, ad.url)
             self._advance(lead, "match", Status.MATCHED)
+
+    def _keep_page(self, lead: Lead, page: Fetched, fetched_at: datetime) -> None:
+        digest = sha256(page.html)
+        self.store.put_page(digest, page.url, page.html, clean_text(page.html), fetched_at)
+        lead.pages.append(PageRef(url=page.url, sha256=digest, fetched_at=fetched_at, via=page.via))
+
+    def _job_ads(self, lead: Lead) -> list[Fetched]:
+        """Public LinkedIn job ads for admin, accounting or invoicing roles posted by this company, through
+        Agent-Reach without a login. The Signal reader reads them like any page, and the Evidence check holds its
+        quotes to the ad text."""
+        reach = self.matcher.reach
+        if reach is None or not reach.cfg.linkedin_jobs:
+            return []
+        items = job_ads(reach.linkedin_jobs(lead.name, lead.city), lead.name)
+        return [Fetched(i.url, job_page_html(i), via="job_ad") for i in items[:2]]
 
     def _texts(self, lead: Lead) -> dict[str, str] | None:
         texts = {}

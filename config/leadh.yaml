@@ -24,12 +24,29 @@ naf:
   excluded_prefixes: ["47", "56", "69.20Z"]
 
 search:
-  # One or several of brave, guess, none, joined by "+". brave is the Brave Search API; guess tries the company name
-  # as a .fr or .com domain. Only a page showing the SIREN makes a match, whatever found the candidate.
-  provider: brave+guess
+  # One or several of brave, agentreach, guess, none, joined by "+". brave is the Brave Search API; agentreach is
+  # Agent-Reach's web search (Exa, no key; see the reach section); guess tries the company name as a .fr or .com
+  # domain. Only a page showing the SIREN makes a match, whatever found the candidate.
+  # No Brave key? LEADH_SEARCH=agentreach+guess.
+  provider: brave+agentreach+guess
   api_key_env: BRAVE_SEARCH_API_KEY
   interval_s: 1.0        # Brave's free plan allows one query a second
   max_candidates: 4
+
+# Agent-Reach (https://github.com/Panniantong/Agent-Reach), installed separately as the `agent-reach` command.
+# When the command is missing, every helper below is skipped with one warning and the run carries on.
+reach:
+  enabled: true
+  command: agent-reach
+  timeout_s: 60
+  search_limit: 8
+  # A site that refuses LeadH (HTTP 401, 403, 406, 429, 503) is read through Agent-Reach (Jina Reader) instead.
+  # Pages robots.txt disallows are never read this way.
+  read_fallback: true
+  # Public LinkedIn job search, no login, for admin, accounting or invoicing ads posted by the lead's company. An ad
+  # is only read by the Signal reader for admin_job_ad; contacts, tools and outreach slots never come from it.
+  linkedin_jobs: true
+  jobs_limit: 10
 
 crawler:
   user_agent: "LeadH/0.1 (+https://github.com/Walid-Birouk/LeadH)"
