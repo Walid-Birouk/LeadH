@@ -38,6 +38,8 @@ class PageRef(BaseModel):
     url: str
     sha256: str
     fetched_at: datetime
+    # direct: LeadH's crawler; reach: the site's page read through Agent-Reach; job_ad: a LinkedIn job ad.
+    via: Literal["direct", "reach", "job_ad"] = "direct"
 
 
 class Signal(BaseModel):

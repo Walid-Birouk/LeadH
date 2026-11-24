@@ -7,9 +7,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import urlsplit
 
-from leadh.http import CircuitOpen, Deadline, FetchError, Http
+from leadh.http import Blocked, CircuitOpen, Deadline, FetchError, Http
 from leadh.models import Lead
 from leadh.pages import domain_of, full_text, links, same_site, siren_in
+from leadh.reach import AgentReach
 from leadh.search import LEGAL_FORMS, WebSearch, is_directory
 
 CONTACT = re.compile(r"contact|nous-trouver|coordonn|acces|where|find-us", re.I)
@@ -42,6 +43,11 @@ def looks_like_directory(text: str) -> bool:
 class Fetched:
     url: str
     html: str
+    via: Literal["direct", "reach", "job_ad"] = "direct"
+
+
+# The site is up but refuses our crawler: these are worth one read through Agent-Reach.
+REFUSED = frozenset({401, 403, 406, 429, 503})
 
 
 def proves(page: Fetched, siren: str) -> bool:
@@ -76,7 +82,9 @@ class Match:
 
 
 class SiteMatcher:
-    def __init__(self, http: Http, search: WebSearch, max_candidates: int, pages_per_site: int) -> None:
+    def __init__(self, http: Http, search: WebSearch, max_candidates: int, pages_per_site: int,
+                 reach: AgentReach | None = None) -> None:
+        self.reach = reach
         self.http = http
         self.search = search
         self.max_candidates = max_candidates
@@ -103,13 +111,22 @@ class SiteMatcher:
             resp = self.http.get(url, tries=1 if probe else None)
         except CircuitOpen:
             raise
-        except FetchError:
-            return None
+        except Blocked:
+            return None  # robots.txt says no: no fallback either
+        except FetchError as e:
+            return self._fallback(url, e)
         if "html" not in resp.headers.get("content-type", "html"):
             return None
         if not probe and not same_site(str(resp.url), domain):
             return None
         return Fetched(str(resp.url), resp.text)
+
+    def _fallback(self, url: str, error: FetchError) -> Fetched | None:
+        """A page the site refused us, read through Agent-Reach instead. Never for a page robots.txt disallows."""
+        if self.reach is None or not self.reach.cfg.read_fallback or error.status not in REFUSED:
+            return None
+        page = self.reach.read(url)
+        return Fetched(url, page, via="reach") if page else None
 
     def match(self, lead: Lead, deadline: Deadline) -> Match | None:
         """The first candidate proven by SIREN; failing that, the first matching on name and postal code."""

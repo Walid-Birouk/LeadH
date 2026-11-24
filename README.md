@@ -45,8 +45,33 @@ appended to `data/handoff/<day>.jsonl`.
   the search misses.
 - `none`: finds nothing.
 
-The default is `brave+guess`. Whatever finds a candidate, it only counts as the company's site when one of its
-pages shows the SIREN.
+- `agentreach`: Agent-Reach's web search (Exa semantic search, no key). See below.
+
+The default is `brave+agentreach+guess`. Whatever finds a candidate, it only counts as the company's site when one
+of its pages shows the SIREN.
+
+## Agent-Reach
+
+[Agent-Reach](https://github.com/Panniantong/Agent-Reach) is a separate command-line tool. Install it from its
+GitHub release (not the PyPI package of the same name, which is someone else's):
+
+```
+uv tool install https://github.com/Panniantong/Agent-Reach/releases/latest/download/agent-reach.zip
+agent-reach channels        # check it runs
+```
+
+LeadH uses three of its features, each switched in the `reach` section of `config/leadh.yaml`:
+
+- **Search** (`search.provider` entry `agentreach`): more candidate sites for the Site matcher.
+- **Read fallback** (`reach.read_fallback`): a page that refuses LeadH's crawler (HTTP 401, 403, 406, 429 or 503) is
+  read through Agent-Reach instead, and stored with `via: reach`. A page robots.txt disallows is never read this way.
+- **LinkedIn job ads** (`reach.linkedin_jobs`): public job search, with no login, for admin, accounting or invoicing
+  ads posted by the lead's company. Up to two ads per lead are stored as pages with `via: job_ad`; the Signal reader
+  can quote them for `admin_job_ad`, and the Evidence check holds the quote to the ad text. Contacts, tools, language
+  and outreach slots never come from an ad.
+
+LeadH never runs Agent-Reach's login channels. If `agent-reach` is not installed, or a channel answers with a rate
+limit, captcha or login request, that helper is skipped for the rest of the run.
 
 ## Campaigns, templates and A/B tests
 
@@ -70,7 +95,7 @@ words; the model only fills these slots, from the lead's own pages:
 - `{specific_fact}`: one concrete fact the site states about the company.
 
 Each fill must come with a sentence quoted from a page the lead's site served, checked like a signal; a name must
-appear in its own quote. LinkedIn and other networks are never read. `{company}`, `{city}`, `{site}` and
+appear in its own quote. Outreach slots never come from LinkedIn or other networks. `{company}`, `{city}`, `{site}` and
 `{email_source}` come from the lead record. `{slot|fallback}` gives the words to use when nothing on the site
 supports the slot; without a fallback the draft is marked `needs_edit` and shows `[[slot]]` for you to finish.
 
@@ -87,7 +112,7 @@ campaign along with the opt-out list), so no campaign drafts that company again.
   is rejected as `no_published_contact`. Every lead keeps `contact.source_url` so the email can say where the
   address came from.
 - Crawling stays on the company's own domain, respects robots.txt, waits a second between requests and names
-  itself in the user agent.
+  itself in the user agent. Agent-Reach reads a page only when the site refused LeadH, never when robots.txt does.
 - The e-invoicing directory (annuaire) is checked by hand only.
 - The report carries lead IDs and reason codes, never names or addresses.
 

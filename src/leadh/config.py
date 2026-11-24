@@ -29,6 +29,20 @@ class SearchConfig(BaseModel):
     max_candidates: int = 3
 
 
+class ReachConfig(BaseModel):
+    """Agent-Reach helpers. Each one does nothing when the `agent-reach` command is not installed."""
+    enabled: bool = False
+    command: str = "agent-reach"
+    timeout_s: float = 60
+    search_limit: int = 8
+    # Read a page through Agent-Reach when the site refuses LeadH's crawler (HTTP 401, 403, 406, 429 or 503).
+    # Never used for a page robots.txt disallows.
+    read_fallback: bool = False
+    # Public LinkedIn job search (no login) for admin, accounting or invoicing ads by the lead's company.
+    linkedin_jobs: bool = False
+    jobs_limit: int = 10
+
+
 class CrawlerConfig(BaseModel):
     user_agent: str
     request_interval_s: float = 1.0
@@ -88,6 +102,7 @@ class Config(BaseModel):
     registry: RegistryConfig
     naf: NafConfig
     search: SearchConfig = SearchConfig()
+    reach: ReachConfig = ReachConfig()
     crawler: CrawlerConfig
     llm: LlmConfig = LlmConfig()
     limits: Limits = Limits()

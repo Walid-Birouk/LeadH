@@ -13,6 +13,7 @@ from leadh.http import Http
 from leadh.models import Lead, Status, Verdict, now
 from leadh.outreach import MODEL_SLOTS, mock_slots
 from leadh.pipeline import STEPS, Pipeline
+from leadh.reach import AgentReach
 from leadh.registry import Registry
 from leadh.report import daily_report, review_list, rule_candidates
 from leadh.search import make_search
@@ -31,9 +32,11 @@ def cmd_run(cfg: Config, args: argparse.Namespace) -> None:
     store = open_store(cfg)
     http = Http(cfg.crawler)
     budget = Budget(cfg.limits.llm_tokens_per_run)
+    reach = AgentReach(cfg.reach) if cfg.reach.enabled else None
     pipeline = Pipeline(
         cfg=cfg, store=store, registry=Registry(cfg, http),
-        matcher=SiteMatcher(http, make_search(cfg.search, http), cfg.search.max_candidates, cfg.limits.pages_per_site),
+        matcher=SiteMatcher(http, make_search(cfg.search, http, reach), cfg.search.max_candidates,
+                            cfg.limits.pages_per_site, reach),
         reader=SignalReader(make_complete(cfg.llm), budget, cfg.llm.max_chars_per_page),
         run_id=args.run_id or date.today().isoformat(), campaign=args.campaign.name if args.campaign else "")
     pipeline.run(args.steps)
