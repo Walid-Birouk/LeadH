@@ -1,6 +1,6 @@
 # Starting values from the design. Recalibrate weights on the first 100 labelled leads; bump rules_version
 # whenever a rule or weight changes so the next run re-scores and re-validates.
-rules_version: v1
+rules_version: v2   # v2: directory_site rule
 data_dir: data
 shadow_mode: true   # verdicts are written but nothing is handed off until you switch this off
 
@@ -40,6 +40,12 @@ reach:
   command: agent-reach
   timeout_s: 60
   search_limit: 8
+  # After "rate limited" or "busy", a channel rests for the time Agent-Reach gives (or pause_s); a lead whose site
+  # search fell in that rest stays "found" and is tried again next run. max_strikes in a row: off for the run.
+  min_interval_s: 3
+  pause_s: 120
+  max_wait_s: 15
+  max_strikes: 3
   # A site that refuses LeadH (HTTP 401, 403, 406, 429, 503) is read through Agent-Reach (Jina Reader) instead.
   # Pages robots.txt disallows are never read this way.
   read_fallback: true

@@ -70,8 +70,14 @@ LeadH uses three of its features, each switched in the `reach` section of `confi
   can quote them for `admin_job_ad`, and the Evidence check holds the quote to the ad text. Contacts, tools, language
   and outreach slots never come from an ad.
 
-LeadH never runs Agent-Reach's login channels. If `agent-reach` is not installed, or a channel answers with a rate
-limit, captcha or login request, that helper is skipped for the rest of the run.
+LeadH never runs Agent-Reach's login channels. If `agent-reach` is not installed, that helper is skipped. When a
+channel is rate-limited or busy it rests for the time Agent-Reach gives (`reach.pause_s` otherwise) and is then
+tried again; a lead whose site search fell in that rest stays `found` for the next run instead of becoming
+`no_site`. Three such answers in a row, or a captcha or login request, turn the channel off for the run.
+
+Public LinkedIn results have no company field, so the posting company is read from the job URL
+(`…-at-<company>-<id>`), then the title. It must equal the lead's name (another division does not count), and
+ads shown outside France are dropped.
 
 ## Campaigns, templates and A/B tests
 

@@ -40,7 +40,7 @@ def test_tool_lowers_need_and_unchecked_signals_count_for_nothing(cfg: Config) -
 def test_approved(cfg: Config, store: Store) -> None:
     lead_ = lead(scores=Scores(need=90, fit=100))
     v = validate(lead_, cfg, store, mx_ok)
-    assert (v.status, v.reasons, v.rules_version) == ("APPROVED", [], "v1")
+    assert (v.status, v.reasons, v.rules_version) == ("APPROVED", [], cfg.rules_version)
 
 
 def test_each_hard_rule_rejects(cfg: Config, store: Store) -> None:
