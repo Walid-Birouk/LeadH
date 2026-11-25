@@ -92,6 +92,8 @@ class Pipeline:
     def match(self) -> None:
         for lead in self.store.by_status(Status.FOUND):
             self._event("match", "in", lead)
+            reach = self.matcher.reach
+            misses = reach.misses if reach else 0
             try:
                 m = self.matcher.match(lead, Deadline(self.cfg.limits.seconds_per_lead))
             except TimeoutError:
@@ -104,6 +106,11 @@ class Pipeline:
                 self._event("match", "error", lead, str(e))
                 continue
             if m is None:
+                if reach and reach.misses > misses:
+                    # Agent-Reach was rate-limited during this lead's lookups: try it again next run rather than
+                    # recording that it has no site.
+                    self._event("match", "deferred", lead, "agent-reach unavailable")
+                    continue
                 self._advance(lead, "match", Status.NO_SITE)
                 continue
             fetched_at = now()
@@ -133,7 +140,7 @@ class Pipeline:
         reach = self.matcher.reach
         if reach is None or not reach.cfg.linkedin_jobs:
             return []
-        items = job_ads(reach.linkedin_jobs(lead.name, lead.city), lead.name)
+        items = job_ads(reach.linkedin_jobs(lead.name, lead.city), lead.name, lead.city)
         return [Fetched(i.url, job_page_html(i), via="job_ad") for i in items[:2]]
 
     def _texts(self, lead: Lead) -> dict[str, str] | None:

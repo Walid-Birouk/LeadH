@@ -8,7 +8,7 @@ from leadh.config import Config, ReachConfig
 from leadh.http import Deadline
 from leadh.models import Lead, Status
 from leadh.pipeline import Pipeline
-from leadh.reach import AgentReach, Item, job_ads, markdown_to_html
+from leadh.reach import AgentReach, Item, ReachSearch, job_ads, markdown_to_html
 from leadh.registry import Registry
 from leadh.search import ChainedSearch, StaticSearch, make_search
 from leadh.signals import Budget, SignalReader, mock_complete
@@ -146,3 +146,102 @@ def test_pipeline_reads_a_linkedin_job_ad_as_evidence(cfg: Config, store: Store)
     assert any(s.type == "admin_job_ad" and s.url == JOB_URL and s.checked for s in got.signals)
     assert got.contact and "linkedin" not in got.contact.source_url
     assert fake.calls[0][1:4] == ["linkedin", "jobs", "EXEMPLE CONSEIL"]
+
+
+def test_company_comes_from_the_url_slug_or_the_title() -> None:
+    from leadh.reach import company_of
+
+    def item(title: str, url: str, text: str = "") -> Item:
+        return Item(title, url, "", text, {"source": {"author": "N/A"}})
+
+    assert company_of(item("Comptable H/F", "https://fr.linkedin.com/jobs/view/comptable-at-doctolib-4413970983")) \
+        == "doctolib"
+    assert company_of(item("Doctolib recrute pour des postes de comptable", "https://x/jobs/view/1")) == "Doctolib"
+    assert company_of(item("Accountant at Capgemini — Singapore", "https://x/jobs/view/2")) == "Capgemini"
+    assert company_of(item("Comptable", "https://x/jobs/view/3", "# Comptable\n\n Exemple Conseil Paris")) \
+        == "Exemple Conseil Paris"
+
+
+def test_job_ads_need_the_exact_company_and_france() -> None:
+    def item(title: str, slug: str, text: str = "") -> Item:
+        return Item(title, f"https://fr.linkedin.com/jobs/view/{slug}", "", text, {})
+
+    items = [
+        item("Assistant comptable H/F", "assistant-comptable-at-exemple-conseil-11"),
+        item("Comptable", "comptable-at-exemple-conseil-invent-12"),  # another division
+        item("Accountant in London", "accountant-at-exemple-conseil-13"),  # abroad
+        item("Développeur", "developpeur-at-exemple-conseil-14"),  # not an admin role
+    ]
+    assert [i.url.rsplit("-", 1)[1] for i in job_ads(items, "EXEMPLE CONSEIL", "PARIS")] == ["11"]
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+        self.slept: list[float] = []
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, s: float) -> None:
+        self.slept.append(s)
+        self.t += s
+
+
+def limited(after: float) -> str:
+    return json.dumps({"ok": False, "items": [], "error": {"code": "RATE_LIMITED", "message": "x"},
+                       "meta": {"attempts": [{"backend": "exa", "retry_after_seconds": after}]}})
+
+
+def test_rate_limit_rests_the_channel_then_tries_again() -> None:
+    answers = iter([limited(60), ok([{"url": "https://a.fr/"}])])
+    clock = Clock()
+    r = AgentReach(ReachConfig(enabled=True, min_interval_s=0), runner=lambda a, t: next(answers),
+                   sleep=clock.sleep, clock=clock)
+    assert r.search("q1") == [] and r.misses == 1
+    assert r.search("q2") == [] and r.misses == 2  # still resting: skipped, not run
+    clock.t += 61
+    assert r.search("q3") == ["https://a.fr/"] and r.misses == 2
+    assert "web" not in r.stopped
+
+
+def test_repeated_rate_limits_turn_the_channel_off_and_login_stops_it_at_once() -> None:
+    clock = Clock()
+    r = AgentReach(ReachConfig(enabled=True, min_interval_s=0, max_strikes=2), runner=lambda a, t: limited(1),
+                   sleep=clock.sleep, clock=clock)
+    r.search("q1")
+    clock.t += 2
+    r.search("q2")
+    assert "web" in r.stopped
+
+    r, fake = reach({("linkedin", "jobs"): fail("NEED_LOGIN")})
+    r.linkedin_jobs("X", None)
+    r.linkedin_jobs("Y", None)
+    assert "linkedin" in r.stopped and len(fake.calls) == 1
+
+
+def test_lead_whose_search_was_rate_limited_stays_found(cfg: Config, store: Store) -> None:
+    clock = Clock()
+    r = AgentReach(ReachConfig(enabled=True, min_interval_s=0), runner=lambda a, t: limited(600),
+                   sleep=clock.sleep, clock=clock)
+    cfg.registry.naf_codes = ["70.22Z"]
+    http = make_http(cfg, fake_web([registry_row("834567896", "SANS SITE SARL")]))
+    p = Pipeline(cfg=cfg, store=store, registry=Registry(cfg, http),
+                 matcher=SiteMatcher(http, ChainedSearch([ReachSearch(r), StaticSearch({})]), 3, 5, r),
+                 reader=SignalReader(mock_complete, Budget(1_000_000), 6000), run_id="r1",
+                 mx=lambda d: True, today=lambda: date(2026, 11, 2))
+    p.run(["scout", "match"])
+    assert next(iter(store.all())).status == Status.FOUND
+
+
+def test_a_directory_site_matched_under_old_rules_is_rejected(cfg: Config, store: Store) -> None:
+    from leadh.models import Contact, Scores, Site
+    from leadh.validator import validate
+
+    stale = lead()
+    stale.category, stale.active = "PME", True
+    stale.site = Site(url="https://apify.com/", siren_found_at="https://apify.com/someone/france-sirene-api")
+    stale.contact = Contact(email="hello@apify.com", kind="generic", source_url="https://apify.com/contact")
+    stale.scores = Scores(need=90, fit=100)
+    v = validate(stale, cfg, store, lambda d: True)
+    assert v.status == "REJECTED" and "directory_site" in v.reasons

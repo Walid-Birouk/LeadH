@@ -102,11 +102,11 @@ def test_budget_stops_reading_and_leaves_leads_for_next_run(cfg: Config, store: 
 
 def test_new_rules_version_rescores(cfg: Config, store: Store) -> None:
     pipeline(cfg, store).run()
-    cfg.rules_version = "v2"
+    cfg.rules_version = "v3"
     cfg.scoring.need["manual_invoicing"] = 0
     pipeline(cfg, store, run_id="r2").run(["score", "validate"])
     lead = by_siren(store)[SIREN_OK]
-    assert lead.verdict.rules_version == "v2"  # type: ignore[attr-defined]
+    assert lead.verdict.rules_version == "v3"  # type: ignore[attr-defined]
 
 
 def test_review_list_shows_quotes_and_links(cfg: Config, store: Store) -> None:

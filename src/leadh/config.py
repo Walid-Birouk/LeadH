@@ -35,6 +35,14 @@ class ReachConfig(BaseModel):
     command: str = "agent-reach"
     timeout_s: float = 60
     search_limit: int = 8
+    # Pacing per channel, and what to do when Agent-Reach says to wait (rate limit, busy, backend paused): that
+    # channel rests for the time it gives, or pause_s. Calls in the meantime are skipped, unless the rest left is at
+    # most max_wait_s, which is slept instead; a lead whose site search was skipped stays "found" for the next run.
+    # max_strikes such answers in a row turn the channel off for the run.
+    min_interval_s: float = 3.0
+    pause_s: float = 120
+    max_wait_s: float = 15
+    max_strikes: int = 3
     # Read a page through Agent-Reach when the site refuses LeadH's crawler (HTTP 401, 403, 406, 429 or 503).
     # Never used for a page robots.txt disallows.
     read_fallback: bool = False

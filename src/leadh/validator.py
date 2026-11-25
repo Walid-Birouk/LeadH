@@ -8,7 +8,9 @@ import dns.resolver
 
 from leadh.config import Config
 from leadh.models import Lead, Verdict
+from leadh.pages import domain_of
 from leadh.registry import is_sme
+from leadh.search import is_directory
 from leadh.store import Store
 
 MxCheck = Callable[[str], bool]
@@ -44,6 +46,9 @@ def hard_failures(lead: Lead, store: Store, mx: MxCheck, skip_commercial_opposit
         reasons.append("already_contacted")
     if lead.site is None:
         reasons.append("no_site_match")
+    elif is_directory(domain_of(lead.site.url)) or is_directory(domain_of(lead.site.siren_found_at)):
+        # A directory or scraper page showing the SIREN (matches made before that check existed) is not the site.
+        reasons.append("directory_site")
     types = {s.type for s in lead.signals if s.checked}
     if "sells_to_consumers" in types and "sells_to_businesses" not in types:
         reasons.append("b2c_only")
